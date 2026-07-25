@@ -844,6 +844,127 @@ describe('EventsPage', () => {
     expect(screen.getByText('just now')).toBeInTheDocument();
   });
 
+  describe('TimeAgo event timestamps', () => {
+    it('renders a recent event with a relative <time> and ISO dateTime', async () => {
+      jest.useFakeTimers();
+      const now = new Date('2026-07-16T10:00:00.000Z');
+      jest.setSystemTime(now);
+      const recentTs = now.getTime() - 3 * 60_000; // 3 minutes ago
+
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            items: [
+              {
+                id: 'evt-recent',
+                ts: recentTs,
+                type: 'pair.registered',
+                payload: { pairId: 'USDC/EURC' },
+              },
+            ],
+          }),
+      } as unknown as Response);
+
+      renderPage();
+
+      expect(await screen.findByText('pair.registered')).toBeInTheDocument();
+
+      const listItem = screen.getByRole('listitem');
+      const eventTime = listItem.querySelector('time');
+      expect(eventTime).toBeInTheDocument();
+      expect(eventTime).toHaveAttribute(
+        'dateTime',
+        new Date(recentTs).toISOString()
+      );
+      expect(eventTime).toHaveTextContent('3m ago');
+      // title holds the absolute locale string while the relative label is shown
+      expect(eventTime).toHaveAttribute('title');
+      expect(eventTime?.getAttribute('title')).not.toBe('');
+    });
+
+    it('renders an old event with a multi-day relative label and ISO dateTime', async () => {
+      jest.useFakeTimers();
+      const now = new Date('2026-07-16T10:00:00.000Z');
+      jest.setSystemTime(now);
+      const oldTs = now.getTime() - 5 * 86_400_000; // 5 days ago
+
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            items: [
+              {
+                id: 'evt-old',
+                ts: oldTs,
+                type: 'pair.updated',
+                payload: { feeBps: 10 },
+              },
+            ],
+          }),
+      } as unknown as Response);
+
+      renderPage();
+
+      expect(await screen.findByText('pair.updated')).toBeInTheDocument();
+
+      const listItem = screen.getByRole('listitem');
+      const eventTime = listItem.querySelector('time');
+      expect(eventTime).toBeInTheDocument();
+      expect(eventTime).toHaveAttribute(
+        'dateTime',
+        new Date(oldTs).toISOString()
+      );
+      expect(eventTime).toHaveTextContent('5d ago');
+    });
+
+    it('does not render event TimeAgo nodes when the list is empty', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () => JSON.stringify({ items: [] }),
+      } as unknown as Response);
+
+      renderPage();
+
+      expect(await screen.findByText(/No events/i)).toBeInTheDocument();
+      // Empty list has no event rows; any <time> would only come from "Last updated"
+      // after a successful fetch — assert no listitems, and no ISO event stamp spans.
+      expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+      expect(
+        document.querySelector('ol time')
+      ).not.toBeInTheDocument();
+    });
+
+    it('keeps type label, payload, and role=alert intact alongside TimeAgo', async () => {
+      const ts = Date.now() - 60_000;
+      global.fetch = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        text: async () =>
+          JSON.stringify({
+            items: [
+              {
+                id: 'evt-intact',
+                ts,
+                type: 'quote.requested',
+                payload: { amount: '100' },
+              },
+            ],
+          }),
+      } as unknown as Response);
+
+      renderPage();
+
+      expect(await screen.findByText('quote.requested')).toBeInTheDocument();
+      expect(screen.getByText(/\"amount\": \"100\"/)).toBeInTheDocument();
+      const listItem = screen.getByRole('listitem');
+      expect(listItem.querySelector('time')).toHaveAttribute(
+        'dateTime',
+        new Date(ts).toISOString()
+      );
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+  });
+
   it('cleans up the live interval and visibility listener on unmount', async () => {
     jest.useFakeTimers();
     const removeEventListenerSpy = jest.spyOn(document, 'removeEventListener');

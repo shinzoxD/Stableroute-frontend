@@ -26,7 +26,7 @@ Each route is defined under `src/app` and connects to its respective UI page:
 - **`/stats`** ([stats/page.tsx](src/app/stats/page.tsx)): Status dashboard showing system metrics and polling the backend.
 - **`/admin`** ([admin/page.tsx](src/app/admin/page.tsx)): Control center to pause or unpause router activity.
 - **`/api-keys`** ([api-keys/page.tsx](src/app/api-keys/page.tsx)): Dashboard to create, list, and revoke API keys. Newly created keys are marked with a "New" badge and their creation time is displayed via relative timestamps (`TimeAgo`).
-- **`/events`** ([events/page.tsx](src/app/events/page.tsx)): Audit log page rendering the system event log history.
+- **`/events`** ([events/page.tsx](src/app/events/page.tsx)): Audit log page rendering the system event log history. Each row's timestamp is rendered with the shared [`TimeAgo`](src/components/TimeAgo.tsx) component (relative label, ISO `dateTime`/`title`).
 - **`/webhooks`** ([webhooks/page.tsx](src/app/webhooks/page.tsx)): Webhook manager for listing and adding event subscribers.
 - **`/settings`** ([settings/page.tsx](src/app/settings/page.tsx)): User settings interface hosting the light/dark appearance toggle.
 - **`/docs`** ([docs/page.tsx](src/app/docs/page.tsx)): Documentation page describing the API endpoints and usage. The **OpenAPI spec link** is resolved from `NEXT_PUBLIC_STABLEROUTE_API_BASE` so it always points at the configured backend rather than the frontend origin. It opens in a new tab with `rel="noopener noreferrer"` and includes an accessible hint that it leaves the dashboard.
