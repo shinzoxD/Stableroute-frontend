@@ -2,12 +2,21 @@
 
 import { Card } from '@/components/Card';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { readTheme, effectiveTheme, type Theme } from '@/lib/theme';
+import {
+  readTheme,
+  effectiveTheme,
+  THEME_CHANGE_EVENT,
+  type Theme,
+} from '@/lib/theme';
 import { getApiBase } from '@/lib/config';
 import { useApi } from '@/lib/useApi';
 import { useEffect, useState } from 'react';
 import { isRouterStatus } from '@/lib/validate';
 
+/**
+ * Read-only row showing the public StableRoute API base operators are talking to.
+ * Uses {@link getApiBase} so only the non-secret `NEXT_PUBLIC_*` origin is shown.
+ */
 function ApiBaseRow() {
   return (
     <Card title="API Base">
@@ -17,12 +26,17 @@ function ApiBaseRow() {
       >
         {getApiBase()}
       </p>
+      <p className="mt-2 text-xs text-neutral-500 dark:text-neutral-500">
+        From <code>NEXT_PUBLIC_STABLEROUTE_API_BASE</code> (public origin only —
+        no credentials are displayed).
+      </p>
     </Card>
   );
 }
 
 type RouterStatus = { paused: boolean };
 
+/** Live router pause/resume status with a manual refresh control. */
 function RouterStatusRow() {
   const status = useApi<RouterStatus>('/api/v1/admin/status', isRouterStatus);
 
@@ -56,14 +70,25 @@ function RouterStatusRow() {
   );
 }
 
+/**
+ * Sample surface that mirrors the resolved light/dark theme so operators can
+ * confirm the effect of the ThemeToggle without leaving Settings.
+ *
+ * Syncs on mount, on same-tab {@link THEME_CHANGE_EVENT}, and on cross-tab
+ * `storage` events.
+ */
 function AppearancePreview() {
   const [theme, setTheme] = useState<Theme>('system');
 
   useEffect(() => {
-    setTheme(readTheme());
-    const handler = () => setTheme(readTheme());
-    window.addEventListener('storage', handler);
-    return () => window.removeEventListener('storage', handler);
+    const sync = () => setTheme(readTheme());
+    sync();
+    window.addEventListener('storage', sync);
+    window.addEventListener(THEME_CHANGE_EVENT, sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener(THEME_CHANGE_EVENT, sync);
+    };
   }, []);
 
   const resolved = effectiveTheme(theme);
@@ -77,12 +102,21 @@ function AppearancePreview() {
     <Card title="Appearance Preview">
       <div
         data-testid="appearance-preview"
+        data-theme-preference={theme}
         data-resolved-theme={resolved}
         className={`rounded-md border ${border} ${bg} ${text} p-4 transition-colors`}
       >
         <p className="text-sm font-medium">Sample Text</p>
         <p className={`mt-1 text-xs ${muted}`}>
-          This is how content appears in the current theme.
+          This is how content appears in the current theme (
+          <span data-testid="appearance-preview-preference">{theme}</span>
+          {theme === 'system' ? (
+            <>
+              {' '}
+              → <span data-testid="appearance-preview-resolved">{resolved}</span>
+            </>
+          ) : null}
+          ).
         </p>
         <div className="mt-3 flex gap-2">
           <span className="inline-flex h-5 w-5 rounded-full bg-blue-500" />
@@ -93,6 +127,7 @@ function AppearancePreview() {
   );
 }
 
+/** Interactive Settings surface: theme select, live preview, API base, router status. */
 export default function SettingsClient() {
   return (
     <main
@@ -101,13 +136,13 @@ export default function SettingsClient() {
       className="mx-auto flex min-h-[60vh] max-w-2xl flex-col gap-8 p-8 focus:outline-none"
     >
       <h1 className="text-3xl font-semibold tracking-tight">Settings</h1>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-medium">Appearance</h2>
+      <fieldset className="flex flex-col gap-2 border-0 p-0">
+        <legend className="text-lg font-medium">Appearance</legend>
         <p className="text-sm text-neutral-600 dark:text-neutral-400">
           Choose a colour scheme. System follows your OS preference.
         </p>
         <ThemeToggle />
-      </section>
+      </fieldset>
       <AppearancePreview />
       <RouterStatusRow />
       <ApiBaseRow />

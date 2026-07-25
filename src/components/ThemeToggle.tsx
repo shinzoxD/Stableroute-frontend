@@ -2,8 +2,18 @@
 
 import { useEffect } from 'react';
 import { rawStringSerializer, useLocalStorage } from '@/lib/useLocalStorage';
-import { effectiveTheme, isTheme, THEME_KEY, type Theme } from '@/lib/theme';
+import {
+  effectiveTheme,
+  isTheme,
+  notifyThemeChange,
+  THEME_KEY,
+  type Theme,
+} from '@/lib/theme';
 
+/**
+ * Segmented light / dark / system control persisted under {@link THEME_KEY}.
+ * Notifies same-tab listeners via {@link notifyThemeChange} after each pick.
+ */
 export function ThemeToggle() {
   const [theme, setTheme] = useLocalStorage<Theme>(
     THEME_KEY,
@@ -29,7 +39,10 @@ export function ThemeToggle() {
         <button
           key={t}
           type="button"
-          onClick={() => setTheme(t)}
+          onClick={() => {
+            setTheme(t);
+            notifyThemeChange();
+          }}
           aria-pressed={theme === t}
           className={`rounded-full px-3 py-1 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[var(--focus-ring-offset)] focus-visible:outline-[color:var(--focus-ring-color)] ${
             theme === t

@@ -28,7 +28,7 @@ Each route is defined under `src/app` and connects to its respective UI page:
 - **`/api-keys`** ([api-keys/page.tsx](src/app/api-keys/page.tsx)): Dashboard to create, list, and revoke API keys. Newly created keys are marked with a "New" badge and their creation time is displayed via relative timestamps (`TimeAgo`).
 - **`/events`** ([events/page.tsx](src/app/events/page.tsx)): Audit log page rendering the system event log history.
 - **`/webhooks`** ([webhooks/page.tsx](src/app/webhooks/page.tsx)): Webhook manager for listing and adding event subscribers.
-- **`/settings`** ([settings/page.tsx](src/app/settings/page.tsx)): User settings interface hosting the light/dark appearance toggle.
+- **`/settings`** ([settings/page.tsx](src/app/settings/page.tsx)): Operator settings surface with a light/dark/system theme select (`ThemeToggle`), a live appearance preview sample, read-only API base display (`NEXT_PUBLIC_STABLEROUTE_API_BASE` / localhost default), and router status. See [docs/theme-storage.md](docs/theme-storage.md).
 - **`/docs`** ([docs/page.tsx](src/app/docs/page.tsx)): Documentation page describing the API endpoints and usage. The **OpenAPI spec link** is resolved from `NEXT_PUBLIC_STABLEROUTE_API_BASE` so it always points at the configured backend rather than the frontend origin. It opens in a new tab with `rel="noopener noreferrer"` and includes an accessible hint that it leaves the dashboard.
 - **`/about`** ([about/page.tsx](src/app/about/page.tsx)): Static about page describing the protocol.
 

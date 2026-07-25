@@ -5,8 +5,9 @@
  *  - Theme selection writes the documented storage key ("stableroute.theme")
  *  - Resolved API base from src/lib/config.ts is displayed
  *  - AppearancePreview region updates its data-resolved-theme when the
- *    stored theme changes (simulated via a storage event)
- *  - Edge cases: env override, unknown storage value, storage unavailable
+ *    theme is selected (same-tab live update) or via a storage event
+ *  - Appearance controls are grouped in a labelled fieldset
+ *  - Edge cases: default base, custom env base, unknown storage, secrets not shown
  */
 
 import {
@@ -18,6 +19,16 @@ import {
 } from '@testing-library/react';
 import SettingsPage from './page';
 import { DEFAULT_API_BASE } from '@/lib/config';
+
+const mockRefetch = jest.fn();
+
+jest.mock('@/lib/useApi', () => ({
+  useApi: jest.fn(() => ({
+    status: 'success' as const,
+    data: { paused: false },
+    refetch: mockRefetch,
+  })),
+}));
 
 // ---------------------------------------------------------------------------
 // Global test-environment setup
@@ -59,6 +70,14 @@ describe('SettingsPage — smoke', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps the main skip target with focus outline suppressed', () => {
+    render(<SettingsPage />);
+    const main = document.getElementById('main-content');
+    expect(main).not.toBeNull();
+    expect(main).toHaveAttribute('tabIndex', '-1');
+    expect(main?.className).toMatch(/focus:outline-none/);
+  });
+
   it('renders all three ThemeToggle buttons', () => {
     render(<SettingsPage />);
     expect(
@@ -79,6 +98,59 @@ describe('SettingsPage — smoke', () => {
   it('renders the API base card heading', () => {
     render(<SettingsPage />);
     expect(screen.getByText(/api base/i)).toBeInTheDocument();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Appearance controls grouping (fieldset / legend)
+// ---------------------------------------------------------------------------
+
+describe('SettingsPage — appearance controls grouping', () => {
+  it('groups Appearance controls in a labelled fieldset', () => {
+    render(<SettingsPage />);
+
+    const group = screen.getByRole('group', { name: /^appearance$/i });
+    expect(group.tagName.toLowerCase()).toBe('fieldset');
+    expect(group).toContainElement(
+      screen.getByRole('button', { name: /^light$/i })
+    );
+    expect(group).toContainElement(
+      screen.getByRole('button', { name: /^dark$/i })
+    );
+    expect(group).toContainElement(
+      screen.getByRole('button', { name: /^system$/i })
+    );
+    expect(group).toContainElement(
+      screen.getByText(/choose a colour scheme/i)
+    );
+  });
+
+  it('exposes the group name through a visible legend', () => {
+    render(<SettingsPage />);
+
+    const legend = document.querySelector('fieldset > legend');
+    expect(legend).toHaveTextContent('Appearance');
+    expect(legend).not.toHaveClass('sr-only');
+  });
+
+  it('does not change the theme-selection behaviour from inside the fieldset', () => {
+    render(<SettingsPage />);
+
+    fireEvent.click(screen.getByRole('button', { name: /^dark$/i }));
+
+    expect(window.localStorage.getItem('stableroute.theme')).toBe('dark');
+    expect(screen.getByRole('button', { name: /^dark$/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('keeps the nested Theme button group nested inside the Appearance fieldset', () => {
+    render(<SettingsPage />);
+
+    const fieldset = screen.getByRole('group', { name: /^appearance$/i });
+    const themeGroup = screen.getByRole('group', { name: /^theme$/i });
+    expect(fieldset).toContainElement(themeGroup);
   });
 });
 
@@ -177,6 +249,22 @@ describe('SettingsPage — API base display', () => {
     expect(el.tagName.toLowerCase()).toBe('p');
     expect(el.className).toMatch(/font-mono/);
   });
+
+  it('does not render secret API credentials on the page', () => {
+    process.env.STABLEROUTE_API_KEY = 'sk-super-secret-credential';
+    process.env.API_SECRET = 'another-secret-value';
+    render(<SettingsPage />);
+    expect(
+      screen.queryByText(/sk-super-secret-credential/)
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/another-secret-value/)).not.toBeInTheDocument();
+    // Public base remains the only config value shown.
+    expect(screen.getByTestId('api-base-value')).toHaveTextContent(
+      DEFAULT_API_BASE
+    );
+    delete process.env.STABLEROUTE_API_KEY;
+    delete process.env.API_SECRET;
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -191,37 +279,31 @@ describe('SettingsPage — AppearancePreview updates with theme', () => {
     expect(preview).toHaveAttribute('data-resolved-theme', 'light');
   });
 
-  it("resolves to 'dark' when the dark button is clicked", async () => {
-    // AppearancePreview reads theme via a storage event listener, not from
-    // shared React state with ThemeToggle. In jsdom, writing to localStorage
-    // from the same window does NOT fire the storage event automatically
-    // (that only happens across different tabs/windows). We therefore write
-    // the value to storage and dispatch the event explicitly, matching the
-    // real cross-tab path that AppearancePreview is designed to handle.
+  it("resolves to 'dark' live when the dark button is clicked (same tab)", async () => {
     render(<SettingsPage />);
     fireEvent.click(screen.getByRole('button', { name: /^dark$/i }));
-    // ThemeToggle wrote "dark" to localStorage; propagate to AppearancePreview.
-    act(() => {
-      window.dispatchEvent(new Event('storage'));
-    });
     await waitFor(() =>
       expect(screen.getByTestId('appearance-preview')).toHaveAttribute(
         'data-resolved-theme',
         'dark'
       )
     );
+    expect(screen.getByTestId('appearance-preview')).toHaveAttribute(
+      'data-theme-preference',
+      'dark'
+    );
   });
 
-  it("resolves to 'light' when the light button is clicked", async () => {
+  it("resolves to 'light' live when the light button is clicked (same tab)", async () => {
     render(<SettingsPage />);
     fireEvent.click(screen.getByRole('button', { name: /^dark$/i }));
-    act(() => {
-      window.dispatchEvent(new Event('storage'));
-    });
+    await waitFor(() =>
+      expect(screen.getByTestId('appearance-preview')).toHaveAttribute(
+        'data-resolved-theme',
+        'dark'
+      )
+    );
     fireEvent.click(screen.getByRole('button', { name: /^light$/i }));
-    act(() => {
-      window.dispatchEvent(new Event('storage'));
-    });
     await waitFor(() =>
       expect(screen.getByTestId('appearance-preview')).toHaveAttribute(
         'data-resolved-theme',
@@ -306,9 +388,11 @@ describe('SettingsPage — edge cases', () => {
     Storage.prototype.setItem = originalSetItem;
   });
 
-  it('does not crash when the Refresh button is clicked while router status is loading', () => {
+  it('shows router live status and invokes refetch on Refresh', () => {
     render(<SettingsPage />);
-    const refreshBtn = screen.getByRole('button', { name: /refresh/i });
-    expect(() => fireEvent.click(refreshBtn)).not.toThrow();
+    expect(screen.getByText(/router is/i)).toBeInTheDocument();
+    expect(screen.getByText(/live/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /refresh/i }));
+    expect(mockRefetch).toHaveBeenCalled();
   });
 });

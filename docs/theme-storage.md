@@ -32,13 +32,17 @@ falls back to `"light"`.
 
 ## AppearancePreview
 
-`AppearancePreview` in `src/app/settings/Client.tsx` listens for
-`window` `storage` events so the preview region updates automatically when the
-theme is changed from another browser tab without requiring a page reload.
+`AppearancePreview` in `src/app/settings/Client.tsx` updates live when the
+theme changes:
 
-It also exposes a `data-resolved-theme` attribute on its root element
-(`data-testid="appearance-preview"`) so tests can assert the resolved value
-directly without relying on CSS class names.
+- **Same tab**: `ThemeToggle` (and `writeTheme`) dispatch the
+  `stableroute:themechange` event (`THEME_CHANGE_EVENT` in `src/lib/theme.ts`).
+- **Other tabs**: the native `window` `storage` event fires when another tab
+  writes `stableroute.theme`.
+
+The preview root (`data-testid="appearance-preview"`) exposes
+`data-theme-preference` (stored value) and `data-resolved-theme` (light/dark)
+so tests can assert the resolved surface without relying on CSS class names.
 
 ## API base display
 
@@ -59,7 +63,10 @@ The test suite at `src/app/settings/page.test.tsx` covers:
 - Trailing slashes are stripped from the displayed URL
 - `AppearancePreview` resolves to `"light"` or `"dark"` based on the selection
 - `AppearancePreview` resolves `"system"` via `matchMedia`
+- `AppearancePreview` updates live on same-tab theme clicks (`stableroute:themechange`)
 - `AppearancePreview` reacts to cross-tab `storage` events
+- Appearance controls are grouped in a labelled `<fieldset>`
+- Only the public API base is shown (no secret credentials)
 - Unknown/corrupt localStorage values fall back gracefully to `"system"`
 - The page renders without crashing when localStorage is unavailable
 

@@ -1,4 +1,11 @@
-import { effectiveTheme, isTheme, readTheme, writeTheme } from '../theme';
+import {
+  effectiveTheme,
+  isTheme,
+  notifyThemeChange,
+  readTheme,
+  THEME_CHANGE_EVENT,
+  writeTheme,
+} from '../theme';
 
 const originalLocalStorage = window.localStorage;
 const originalMatchMedia = window.matchMedia;
@@ -53,6 +60,25 @@ describe('theme storage helpers', () => {
 
     expect(() => writeTheme('light')).not.toThrow();
     expect(setItem).toHaveBeenCalledWith('stableroute.theme', 'light');
+  });
+
+  it('writeTheme dispatches THEME_CHANGE_EVENT for same-tab listeners', () => {
+    const handler = jest.fn();
+    window.addEventListener(THEME_CHANGE_EVENT, handler);
+    writeTheme('dark');
+    expect(handler).toHaveBeenCalledTimes(1);
+    window.removeEventListener(THEME_CHANGE_EVENT, handler);
+  });
+
+  it('notifyThemeChange is a no-op when window is unavailable', () => {
+    const win = global.window;
+    // @ts-expect-error -- simulating a server environment for this call
+    delete global.window;
+    try {
+      expect(() => notifyThemeChange()).not.toThrow();
+    } finally {
+      global.window = win;
+    }
   });
 });
 
