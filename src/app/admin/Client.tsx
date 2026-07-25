@@ -7,10 +7,30 @@ import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { apiGet, apiPost } from '@/lib/apiClient';
 import { isRouterStatus } from '@/lib/validate';
 
+/**
+ * Admin operator controls for router pause / unpause.
+ *
+ * Safety policy:
+ * - **Pause** is gated behind a `ConfirmDialog` so a single misclick cannot
+ *   stop routing. The POST to `/api/v1/admin/pause` only fires after the
+ *   operator confirms; cancel closes the dialog with zero network calls.
+ * - **Unpause** runs immediately (no confirm). Restoring traffic is the
+ *   recovery action and should not be delayed by an extra modal step.
+ *
+ * Status is rendered with `Badge` (`ok` = Live, `warning` = Paused). The toggle
+ * is disabled with `aria-busy` while a pause/unpause request is in flight, and
+ * status is reloaded from `GET /api/v1/admin/status` after a successful toggle.
+ * Failures surface in a `role="alert"` region.
+ */
 export default function AdminClient() {
   const [paused, setPaused] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** True while a pause/unpause POST (and status reload) is in flight. */
   const [busy, setBusy] = useState(false);
+  /**
+   * Whether the pause confirmation dialog is open.
+   * Only used for live → pause; unpause never opens this dialog.
+   */
   const [confirmPause, setConfirmPause] = useState(false);
 
   const load = () =>
@@ -24,6 +44,10 @@ export default function AdminClient() {
     load();
   }, []);
 
+  /**
+   * POST pause or unpause based on the current status, then reload status.
+   * Guards against double-submit while `busy` is true.
+   */
   const applyToggle = async () => {
     if (busy || paused === null) return;
     setError(null);
@@ -41,6 +65,10 @@ export default function AdminClient() {
     }
   };
 
+  /**
+   * Toggle click handler: open confirm for pause; unpause immediately.
+   * See component JSDoc for the operator-safety policy.
+   */
   const onToggleClick = () => {
     if (busy || paused === null) return;
     if (paused) {
@@ -92,6 +120,7 @@ export default function AdminClient() {
         open={confirmPause}
         tone="danger"
         title="Pause routing?"
+        description="This stops the router from serving new routes until you unpause. Confirm only if you intend to halt routing."
         confirmLabel="Pause router"
         onConfirm={() => {
           setConfirmPause(false);
