@@ -227,6 +227,157 @@ describe('ApiKeysPage', () => {
     expect(screen.getAllByText(/Key/i).length).toBeGreaterThanOrEqual(1);
   });
 
+  describe('submit in-flight', () => {
+    it('disables the Create button and shows Creating… while the request is in flight', async () => {
+      let resolvePost: ((value: unknown) => void) | undefined;
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ items: [] }),
+        } as unknown as Response)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolvePost = resolve;
+            })
+        )
+        .mockResolvedValue({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              items: [
+                {
+                  prefix: 'sk_live',
+                  label: 'Production operator',
+                  createdAt: Date.now(),
+                },
+              ],
+            }),
+        } as unknown as Response);
+      global.fetch = fetchMock as unknown as typeof global.fetch;
+
+      renderPage();
+      await waitFor(() => screen.getByText(/No API keys yet/i));
+
+      fireEvent.change(screen.getByLabelText('Label'), {
+        target: { value: 'Production operator' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+      const busy = await screen.findByRole('button', { name: /Creating/i });
+      expect(busy).toBeDisabled();
+      expect(busy).toHaveAttribute('aria-busy', 'true');
+
+      resolvePost?.({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ key: 'sk_live_supersecret', prefix: 'sk_live' }),
+      });
+
+      await waitFor(() => {
+        const create = screen.getByRole('button', { name: 'Create' });
+        expect(create).not.toBeDisabled();
+        expect(create).toHaveAttribute('aria-busy', 'false');
+      });
+    });
+
+    it('fires only one POST when Create is submitted rapidly', async () => {
+      let resolvePost: ((value: unknown) => void) | undefined;
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ items: [] }),
+        } as unknown as Response)
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              resolvePost = resolve;
+            })
+        )
+        .mockResolvedValue({
+          ok: true,
+          text: async () =>
+            JSON.stringify({
+              items: [
+                {
+                  prefix: 'sk_live',
+                  label: 'Double click',
+                  createdAt: Date.now(),
+                },
+              ],
+            }),
+        } as unknown as Response);
+      global.fetch = fetchMock as unknown as typeof global.fetch;
+
+      renderPage();
+      await waitFor(() => screen.getByText(/No API keys yet/i));
+
+      fireEvent.change(screen.getByLabelText('Label'), {
+        target: { value: 'Double click' },
+      });
+      const form = screen.getByLabelText('Label').closest('form')!;
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+      fireEvent.submit(form);
+
+      await waitFor(() => {
+        expect(fetchMock.mock.calls.length).toBeGreaterThanOrEqual(2);
+      });
+      // Initial GET + a single create POST (no duplicate POSTs)
+      const postCalls = fetchMock.mock.calls.filter((call) => {
+        const init = call[1] as RequestInit | undefined;
+        return init?.method === 'POST';
+      });
+      expect(postCalls).toHaveLength(1);
+
+      resolvePost?.({
+        ok: true,
+        text: async () =>
+          JSON.stringify({ key: 'sk_live_supersecret', prefix: 'sk_live' }),
+      });
+
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: 'Create' })
+        ).not.toBeDisabled();
+      });
+    });
+
+    it('re-enables Create after a failed create request', async () => {
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => JSON.stringify({ items: [] }),
+        } as unknown as Response)
+        .mockResolvedValueOnce({
+          ok: false,
+          text: async () =>
+            JSON.stringify({
+              error: 'server_error',
+              message: 'Create failed',
+            }),
+        } as unknown as Response);
+      global.fetch = fetchMock as unknown as typeof global.fetch;
+
+      renderPage();
+      await waitFor(() => screen.getByText(/No API keys yet/i));
+
+      fireEvent.change(screen.getByLabelText('Label'), {
+        target: { value: 'Will fail' },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Create' }));
+
+      await waitFor(() => {
+        const create = screen.getByRole('button', { name: 'Create' });
+        expect(create).not.toBeDisabled();
+        expect(create).toHaveAttribute('aria-busy', 'false');
+      });
+    });
+  });
+
   describe('clipboard guard', () => {
     function mockCreateFlow() {
       global.fetch = jest

@@ -1,17 +1,18 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
 import { IconButton } from '@/components/IconButton';
 import { ResourceList } from '@/components/ResourceList';
 import { TextField } from '@/components/TextField';
 import { TimeAgo } from '@/components/TimeAgo';
 import { apiDelete, apiGet, apiPost } from '@/lib/apiClient';
-import { useList } from '@/lib/useList';
-import { WEBHOOK_EVENT_OPTIONS } from '@/lib/webhookEvents';
 import type { Webhook } from '@/lib/types';
+import { useList } from '@/lib/useList';
 import { isWebhookListResponse } from '@/lib/validate';
+import { WEBHOOK_EVENT_OPTIONS } from '@/lib/webhookEvents';
 
 function isHttpsUrl(value: string): boolean {
   try {
@@ -34,7 +35,10 @@ export default function WebhooksClient() {
   const [selectedEvents, setSelectedEvents] = useState<string[]>([
     'pair.registered',
   ]);
+  /** True while register POST (and the following list refetch) is in flight. */
   const [submitting, setSubmitting] = useState(false);
+  /** Synchronous guard so rapid double-submit cannot race past React state. */
+  const submittingRef = useRef(false);
   const [confirmRegister, setConfirmRegister] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -51,7 +55,14 @@ export default function WebhooksClient() {
     );
   };
 
+  /**
+   * Register a webhook for the current URL and selected events.
+   * Guards against double-submit while a request is already in flight; the
+   * submit control is disabled and shows "Registering…" until the try/finally
+   * clears `submitting` on both success and failure.
+   */
   const registerWebhook = async () => {
+    if (submittingRef.current) return;
     if (!isHttpsUrl(url)) {
       setLocalError('Webhook URL must use HTTPS.');
       return;
@@ -61,6 +72,7 @@ export default function WebhooksClient() {
       return;
     }
     setLocalError(null);
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       await apiPost('/api/v1/webhooks', { url, events: selectedEvents });
@@ -69,6 +81,7 @@ export default function WebhooksClient() {
     } catch (err) {
       setLocalError((err as Error).message);
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -109,14 +122,14 @@ export default function WebhooksClient() {
             ))}
           </div>
         </fieldset>
-        <button
+        <Button
           type="submit"
           disabled={submitting}
           aria-busy={submitting}
-          className="self-start rounded-full bg-black px-5 py-2 text-sm text-white disabled:opacity-50"
+          className="self-start"
         >
           {submitting ? 'Registering…' : 'Register'}
-        </button>
+        </Button>
         {displayError && (
           <p role="alert" className="text-sm text-rose-600">
             {displayError}

@@ -484,7 +484,7 @@ describe('WebhooksPage', () => {
     expect(body.events).toContain('pair.registered');
   });
 
-  it('shows Registering… on the button while submitting', async () => {
+  it('disables Register and shows Registering… while the request is in flight', async () => {
     const fetchMock = jest.fn();
     let resolvePost!: (v: unknown) => void;
     fetchMock
@@ -498,7 +498,12 @@ describe('WebhooksPage', () => {
           new Promise((res) => {
             resolvePost = res;
           })
-      );
+      )
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ items: [] })),
+      } as unknown as Response);
     global.fetch = fetchMock as unknown as typeof global.fetch;
 
     render(<WebhooksPage />);
@@ -511,18 +516,116 @@ describe('WebhooksPage', () => {
     await waitFor(() => screen.getByRole('dialog'));
     fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
 
-    await waitFor(() =>
-      expect(
-        screen.getByRole('button', { name: /registering/i })
-      ).toBeDisabled()
-    );
+    const busy = await screen.findByRole('button', { name: /registering/i });
+    expect(busy).toBeDisabled();
+    expect(busy).toHaveAttribute('aria-busy', 'true');
 
-    // Unblock the POST
     resolvePost({
       ok: true,
       status: 201,
       text: () => Promise.resolve('{}'),
     });
+
+    await waitFor(() => {
+      const register = screen.getByRole('button', { name: /^register$/i });
+      expect(register).not.toBeDisabled();
+      expect(register).toHaveAttribute('aria-busy', 'false');
+    });
+  });
+
+  it('fires only one POST when registration is confirmed rapidly', async () => {
+    const fetchMock = jest.fn();
+    let resolvePost!: (v: unknown) => void;
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ items: [] })),
+      } as unknown as Response)
+      .mockImplementationOnce(
+        () =>
+          new Promise((res) => {
+            resolvePost = res;
+          })
+      )
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ items: [] })),
+      } as unknown as Response);
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+
+    render(<WebhooksPage />);
+    await waitFor(() => screen.getByText(/No webhooks registered/i));
+
+    fireEvent.change(screen.getByLabelText(/URL/i), {
+      target: { value: 'https://example.com/hook' },
+    });
+    fireEvent.submit(screen.getByLabelText(/URL/i).closest('form')!);
+    await waitFor(() => screen.getByRole('dialog'));
+    const confirm = screen.getByRole('button', { name: /^confirm$/i });
+    // Double-click confirm before React re-renders the in-flight button state.
+    fireEvent.click(confirm);
+    fireEvent.click(confirm);
+
+    await waitFor(() => {
+      const postCalls = fetchMock.mock.calls.filter((call) => {
+        const init = call[1] as RequestInit | undefined;
+        return init?.method === 'POST';
+      });
+      expect(postCalls).toHaveLength(1);
+    });
+
+    resolvePost({
+      ok: true,
+      status: 201,
+      text: () => Promise.resolve('{}'),
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /^register$/i })
+      ).not.toBeDisabled();
+    });
+  });
+
+  it('re-enables Register after a failed create request', async () => {
+    const fetchMock = jest.fn();
+    fetchMock
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        text: () => Promise.resolve(JSON.stringify({ items: [] })),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              error: 'server_error',
+              message: 'Register failed',
+            })
+          ),
+      } as unknown as Response);
+    global.fetch = fetchMock as unknown as typeof global.fetch;
+
+    render(<WebhooksPage />);
+    await waitFor(() => screen.getByText(/No webhooks registered/i));
+
+    fireEvent.change(screen.getByLabelText(/URL/i), {
+      target: { value: 'https://example.com/hook' },
+    });
+    fireEvent.submit(screen.getByLabelText(/URL/i).closest('form')!);
+    await waitFor(() => screen.getByRole('dialog'));
+    fireEvent.click(screen.getByRole('button', { name: /^confirm$/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Register failed/i)).toBeInTheDocument();
+    });
+    const register = screen.getByRole('button', { name: /^register$/i });
+    expect(register).not.toBeDisabled();
+    expect(register).toHaveAttribute('aria-busy', 'false');
   });
 
   it('cancelling the confirm dialog does not submit', async () => {

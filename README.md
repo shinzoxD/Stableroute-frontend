@@ -217,6 +217,17 @@ The component APIs and visual design for users without reduced-motion enabled ar
 | Linux (GNOME) | Settings → Accessibility → Seeing → enable **Reduced Animation**                                             |
 | Any browser   | Open DevTools → **Rendering** panel → set **Emulate CSS media feature `prefers-reduced-motion`** to `reduce` |
 
+### Submit in-flight convention
+
+Create/register forms (api-keys, webhooks, and the new-pair form) track a `submitting` flag while their mutation is in flight. While that flag is set:
+
+- the submit control is **disabled** and exposes `aria-busy="true"`
+- the button label switches to a pending state (`Creating…`, `Registering…`, `Saving…`)
+- a synchronous ref guard drops rapid double-submits before React re-renders
+- the flag is cleared in a `finally` block on both success and failure
+
+Reuse `src/components/Button.tsx` for these submit controls so disabled styling stays consistent.
+
 ### ARIA Live Regions
 
 Dynamic list updates (loading → loaded / loading → empty) on the pairs, events, api-keys, and webhooks pages are wrapped in `aria-live="polite"` regions so screen-reader users are notified when content arrives. Error messages continue to use `role="alert"` for assertive announcements. A single polite region per page prevents double announcements.

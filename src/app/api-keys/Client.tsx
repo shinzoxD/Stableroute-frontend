@@ -1,16 +1,17 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState, type FormEvent } from 'react';
+import { Badge } from '@/components/Badge';
+import { Button } from '@/components/Button';
 import { IconButton } from '@/components/IconButton';
 import { ResourceList } from '@/components/ResourceList';
 import { TextField } from '@/components/TextField';
 import { TimeAgo } from '@/components/TimeAgo';
-import { Badge } from '@/components/Badge';
-import { apiDelete, apiGet, apiPost } from '@/lib/apiClient';
-import { useList } from '@/lib/useList';
-import { writeToClipboard } from '@/lib/clipboard';
 import { useToast } from '@/components/ToastProvider';
+import { apiDelete, apiGet, apiPost } from '@/lib/apiClient';
+import { writeToClipboard } from '@/lib/clipboard';
 import type { ApiKey, CreateApiKeyResponse } from '@/lib/types';
+import { useList } from '@/lib/useList';
 import { isApiKeyListResponse, isCreateApiKeyResponse } from '@/lib/validate';
 
 export default function ApiKeysClient() {
@@ -27,15 +28,26 @@ export default function ApiKeysClient() {
   const [created, setCreated] = useState<string | null>(null);
   /** The prefix of the most recently created API key, used to mark its row with a "New" badge. Persists until page reload or navigation. */
   const [recentPrefix, setRecentPrefix] = useState<string | null>(null);
+  /** True while create POST (and the following list refetch) is in flight. */
   const [submitting, setSubmitting] = useState(false);
+  /** Synchronous guard so rapid double-submit cannot race past React state. */
+  const submittingRef = useRef(false);
   const [copyFailed, setCopyFailed] = useState(false);
   const { push } = useToast();
   const items = itemsResult.status === 'success' ? itemsResult.data : null;
   const loading =
     itemsResult.status === 'idle' || itemsResult.status === 'loading';
 
-  const onCreate = async (event: React.FormEvent) => {
+  /**
+   * Create an API key for the current label.
+   * Guards against double-submit while a request is already in flight; the
+   * submit control is disabled and shows "Creating…" until the try/finally
+   * clears `submitting` on both success and failure.
+   */
+  const onCreate = async (event: FormEvent) => {
     event.preventDefault();
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
     try {
       const response = await apiPost<CreateApiKeyResponse>(
@@ -48,9 +60,10 @@ export default function ApiKeysClient() {
       setRecentPrefix(response.prefix ?? response.key.slice(0, 8));
       setLabel('');
       await itemsResult.refetch();
-    } catch (err) {
-      /* surfaced via useList error if refetch fails; keep form local */
+    } catch {
+      /* Create failures stay local; list errors surface via useList. */
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
   };
@@ -92,14 +105,13 @@ export default function ApiKeysClient() {
           placeholder="Production operator"
           className="flex-1"
         />
-        <button
+        <Button
           type="submit"
           disabled={submitting}
           aria-busy={submitting}
-          className="rounded-full bg-black px-4 py-2 text-sm text-white disabled:opacity-50"
         >
           {submitting ? 'Creating…' : 'Create'}
-        </button>
+        </Button>
       </form>
       {created && !secretVisible && (
         <p role="alert" className="text-sm text-amber-700 dark:text-amber-300">
