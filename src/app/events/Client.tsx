@@ -248,7 +248,11 @@ export default function EventsClient() {
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2 text-neutral-500">
                       <span>{event.type}</span>
-                      <span>{new Date(event.ts).toISOString()}</span>
+                      {/**
+                       * Relative timestamp via the shared TimeAgo control: self-updating
+                       * label with ISO `dateTime`/`title` for a11y and hover detail.
+                       */}
+                      <TimeAgo ts={event.ts} />
                     </div>
                     <div className="mt-2 flex gap-2">
                       <Button
