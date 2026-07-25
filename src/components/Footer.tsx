@@ -3,9 +3,16 @@ import Link from 'next/link';
 const footerLinkClass =
   'rounded px-1 underline-offset-4 hover:text-neutral-900 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[var(--focus-ring-offset)] focus-visible:outline-[color:var(--focus-ring-color)] dark:hover:text-neutral-100';
 
+/** StableRoute community Discord invite (opens in a new tab). */
+export const DISCORD_INVITE_URL = 'https://discord.gg/37aCpusvx';
+
 /**
- * Site-wide footer with the StableRoute tagline, current year, and primary
- * documentation/community links.
+ * Site-wide footer rendered from the root layout.
+ *
+ * Preserves the StableRoute tagline, shows a copyright line with a
+ * dynamically computed current year (never hard-coded), and exposes
+ * primary navigation to `/docs`, `/about`, and the StableRoute Discord.
+ * Remains a Server Component — the year is computed at render time.
  */
 export function Footer() {
   const year = new Date().getFullYear();
@@ -25,7 +32,8 @@ export function Footer() {
           About
         </Link>
         <a
-          href="https://discord.gg/37aCpusvx"
+          href={DISCORD_INVITE_URL}
+          target="_blank"
           rel="noopener noreferrer"
           aria-label="StableRoute Discord (opens externally)"
           className={footerLinkClass}

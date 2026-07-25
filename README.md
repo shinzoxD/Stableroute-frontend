@@ -64,7 +64,13 @@ Data fetching helpers (`apiClient`, `useApi`, `useList`) live in `src/lib`.
 
 ## Footer Navigation
 
-The shared footer keeps the StableRoute tagline visible on every page, renders the current copyright year dynamically, and links to `/docs`, `/about`, and the StableRoute Discord community.
+The shared [`Footer`](src/components/Footer.tsx) is mounted from the root layout on every page. It:
+
+- Keeps the StableRoute tagline
+- Renders a copyright line with a **dynamically computed** current year (no hard-coded year)
+- Links to **Docs** (`/docs`) and **About** (`/about`) via `next/link`
+- Links to the **StableRoute Discord** (`https://discord.gg/37aCpusvx`) as an external anchor with `target="_blank"`, `rel="noopener noreferrer"`, and an accessible name that indicates it opens externally
+- Preserves footer border/spacing and focus-visible ring styling on links, and remains a Server Component
 
 ## Configuration & API Integration
 
