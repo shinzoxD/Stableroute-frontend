@@ -2,6 +2,8 @@
 
 import { useState, type ReactNode } from 'react';
 import { ConfirmDialog } from './ConfirmDialog';
+import { EmptyState } from './EmptyState';
+import { Spinner } from './Spinner';
 
 /** Actions handed to `renderRow` so a row can trigger the shared remove flow. */
 export type ResourceRowActions = {
@@ -14,8 +16,16 @@ export type ResourceListProps<T> = {
   items: T[] | null;
   /** Whether a (re)load is currently pending. */
   loading: boolean;
-  /** Message shown when the list is empty (after loading finishes). */
+  /**
+   * Title for the empty state shown when the list is loaded and has zero items.
+   * Passed through to `EmptyState` as `title`.
+   */
   emptyMessage: string;
+  /**
+   * Optional description under the empty-state title. When omitted, only the
+   * title is rendered.
+   */
+  emptyDescription?: string;
   /** Stable key for each item, used as the `<li>` React key. */
   getKey: (item: T) => string;
   /**
@@ -43,8 +53,17 @@ export type ResourceListProps<T> = {
   removeDialogTone?: 'default' | 'danger';
   /** Invoked with the item when removal is confirmed. */
   onRemove: (item: T) => void | Promise<void>;
-  /** Loading message, defaults to `Loading…`. */
+  /**
+   * Visible loading copy next to the spinner. Defaults to `Loading…`.
+   * The spinner's `role="status"` `sr-only` label is controlled by
+   * `loadingLabel` so assistive tech gets a concise status string.
+   */
   loadingMessage?: string;
+  /**
+   * Screen-reader label for the loading spinner (`role="status"`). Defaults
+   * to `Loading`. Keep this short; visible copy stays in `loadingMessage`.
+   */
+  loadingLabel?: string;
   /**
    * When provided, the list renders as a semantic `<table>` with this text
    * as the `<caption>`. The caption is visually hidden but available to
@@ -72,6 +91,16 @@ export type ResourceListProps<T> = {
  * Page clients keep ownership of their create forms (which differ in fields
  * and pre-submit confirmation) and pass the per-row content via `renderRow`.
  *
+ * **State convention** (initial list fetch):
+ * - `items === null` and `loading`: show `Spinner` (`role="status"`) + loading copy.
+ * - `items` is `[]`: show `EmptyState` with `emptyMessage` (and optional description).
+ * - `items.length > 0`: show the table or list of rows.
+ *
+ * A single `aria-live="polite"` region wraps those three states so transitions
+ * announce once. Errors stay outside this region with `role="alert"`. The
+ * spinner's own `role="status"` is the loading announcement; do not nest a
+ * second polite live region for the same message.
+ *
  * When `caption` and `tableHeaders` are provided the component renders a
  * semantic `<table>` with `<caption>`, `scope="col"` headers, and
  * `scope="row"` on the first cell of each row — improving the experience
@@ -81,6 +110,7 @@ export function ResourceList<T>({
   items,
   loading,
   emptyMessage,
+  emptyDescription,
   getKey,
   renderRow,
   renderCells,
@@ -90,6 +120,7 @@ export function ResourceList<T>({
   removeDialogTone = 'danger',
   onRemove,
   loadingMessage = 'Loading…',
+  loadingLabel = 'Loading',
   caption,
   tableHeaders,
   announcement,
@@ -103,14 +134,21 @@ export function ResourceList<T>({
   };
 
   const useTable = Boolean(caption && tableHeaders && renderCells);
+  /** True while the first load is in flight (`items` still null). */
+  const initialLoading = loading && !items;
 
   return (
     <>
-      <div aria-live="polite" aria-atomic="true">
+      <div aria-live="polite" aria-atomic="true" aria-busy={initialLoading}>
         {announcement && <p className="sr-only">{announcement}</p>}
-        {loading && !items && <p>{loadingMessage}</p>}
+        {initialLoading && (
+          <div className="flex items-center gap-2 text-sm text-neutral-600 dark:text-neutral-400">
+            <Spinner label={loadingLabel} />
+            {loadingMessage}
+          </div>
+        )}
         {items && items.length === 0 && (
-          <p className="text-sm text-neutral-600">{emptyMessage}</p>
+          <EmptyState title={emptyMessage} description={emptyDescription} />
         )}
         {items && items.length > 0 && useTable && (
           <table className="w-full border-collapse">

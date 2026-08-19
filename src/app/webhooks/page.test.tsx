@@ -164,13 +164,22 @@ describe('WebhooksPage', () => {
   // LIST / RENDER
   // -------------------------------------------------------------------------
 
-  it('shows loading indicator before data arrives', () => {
+  it('shows loading spinner with role=status before data arrives', () => {
     // fetch that never resolves → stays in loading state
     global.fetch = jest.fn(
       () => new Promise(() => {})
     ) as unknown as typeof global.fetch;
     render(<WebhooksPage />);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
+    const status = screen.getByRole('status');
+    expect(status).toBeInTheDocument();
+    expect(status).toHaveTextContent(/Loading webhooks/i);
+    // Exactly one explicit polite live region (Spinner uses role=status, not aria-live)
+    expect(document.querySelectorAll('[aria-live=polite]')).toHaveLength(1);
+    expect(document.querySelector('[aria-live=polite]')).toHaveAttribute(
+      'aria-busy',
+      'true'
+    );
   });
 
   it('renders the page heading', async () => {
@@ -198,7 +207,7 @@ describe('WebhooksPage', () => {
     expect(screen.getByText('pair.deleted')).toBeInTheDocument();
   });
 
-  it('renders multiple webhooks', async () => {
+  it('renders multiple webhooks (populated list)', async () => {
     mockFetchSequence({ ok: true, body: { items: [HOOK_1, HOOK_2] } });
     render(<WebhooksPage />);
     await waitFor(() =>
@@ -207,14 +216,23 @@ describe('WebhooksPage', () => {
     expect(
       screen.getByText('https://other.example.com/hook')
     ).toBeInTheDocument();
+    // Loading spinner is gone once the list is populated
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('shows the empty state message when there are no webhooks', async () => {
+  it('shows EmptyState title and description when there are no webhooks', async () => {
     mockFetchSequence({ ok: true, body: { items: [] } });
     render(<WebhooksPage />);
     await waitFor(() =>
       expect(screen.getByText(/No webhooks registered/i)).toBeInTheDocument()
     );
+    expect(
+      screen.getByText(
+        /Register your first webhook endpoint using the form above/i
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+    expect(document.querySelector('table')).not.toBeInTheDocument();
   });
 
   it('renders the EmptyState component when there are no webhooks', async () => {
@@ -237,9 +255,10 @@ describe('WebhooksPage', () => {
     const live = document.querySelector('[aria-live=polite]');
     expect(live).toBeInTheDocument();
     expect(live).toHaveAttribute('aria-atomic', 'true');
+    expect(live).toHaveAttribute('aria-busy', 'false');
   });
 
-  it('has exactly one aria-live=polite region', async () => {
+  it('has exactly one aria-live=polite region in empty and populated states', async () => {
     mockFetchSequence({ ok: true, body: { items: [] } });
     render(<WebhooksPage />);
     await waitFor(() =>

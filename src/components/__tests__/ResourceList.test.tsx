@@ -35,27 +35,86 @@ function basicProps(
 }
 
 describe('ResourceList', () => {
-  it('renders the loading message while the first load is in flight', () => {
+  it('renders the loading spinner and message while the first load is in flight', () => {
     render(<ResourceList {...basicProps({ items: null, loading: true })} />);
+    expect(screen.getByRole('status')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Loading/);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
   });
 
-  it('uses a custom loading message when provided', () => {
+  it('uses a custom loading message and spinner label when provided', () => {
     render(
       <ResourceList
         {...basicProps({
           items: null,
           loading: true,
           loadingMessage: 'Fetching…',
+          loadingLabel: 'Fetching items',
         })}
       />
     );
     expect(screen.getByText('Fetching…')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/Fetching items/);
   });
 
-  it('renders the empty message when there are no items', () => {
-    render(<ResourceList {...basicProps({ items: [] })} />);
+  it('marks the live region aria-busy while the initial load is pending', () => {
+    render(<ResourceList {...basicProps({ items: null, loading: true })} />);
+    const live = document.querySelector('[aria-live=polite]');
+    expect(live).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('clears aria-busy once items have loaded', () => {
+    render(<ResourceList {...basicProps()} />);
+    const live = document.querySelector('[aria-live=polite]');
+    expect(live).toHaveAttribute('aria-busy', 'false');
+  });
+
+  it('renders EmptyState when there are no items', () => {
+    render(
+      <ResourceList
+        {...basicProps({
+          items: [],
+          emptyMessage: 'Nothing here.',
+          emptyDescription: 'Add one to get started.',
+        })}
+      />
+    );
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();
+    expect(screen.getByText('Add one to get started.')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('keeps form announcements in the same live region as EmptyState', () => {
+    render(
+      <ResourceList
+        {...basicProps({
+          items: [],
+          emptyMessage: 'Nothing here.',
+          announcement: 'Webhook registered.',
+        })}
+      />
+    );
+    const live = document.querySelector('[aria-live=polite]');
+    expect(live).toHaveTextContent('Nothing here.');
+    expect(live).toHaveTextContent('Webhook registered.');
+    expect(live?.querySelector('.sr-only')).toHaveTextContent(
+      'Webhook registered.'
+    );
+  });
+
+  it('does not show EmptyState or rows while the initial load is in flight', () => {
+    render(
+      <ResourceList
+        {...basicProps({
+          items: null,
+          loading: true,
+          emptyMessage: 'Nothing here.',
+        })}
+      />
+    );
+    expect(screen.queryByText('Nothing here.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Alpha')).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
   });
 
   it('renders one row per item with stable keys', () => {
@@ -239,15 +298,16 @@ describe('ResourceList — table mode', () => {
     expect(document.querySelector('table')).not.toBeInTheDocument();
   });
 
-  it('still shows the empty message in table mode when items are empty', () => {
+  it('still shows EmptyState in table mode when items are empty', () => {
     render(<ResourceList {...tableProps({ items: [] })} />);
     expect(screen.getByText('Nothing here.')).toBeInTheDocument();
     expect(document.querySelector('table')).not.toBeInTheDocument();
   });
 
-  it('still shows loading in table mode when items are null', () => {
+  it('still shows Spinner loading in table mode when items are null', () => {
     render(<ResourceList {...tableProps({ items: null, loading: true })} />);
     expect(screen.getByText('Loading…')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toBeInTheDocument();
     expect(document.querySelector('table')).not.toBeInTheDocument();
   });
 

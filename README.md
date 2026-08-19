@@ -223,6 +223,19 @@ The component APIs and visual design for users without reduced-motion enabled ar
 
 Dynamic list updates (loading → loaded / loading → empty) on the pairs, events, api-keys, and webhooks pages are wrapped in `aria-live="polite"` regions so screen-reader users are notified when content arrives. Error messages continue to use `role="alert"` for assertive announcements. A single polite region per page prevents double announcements.
 
+### List loading / empty state convention
+
+CRUD list shells (`ResourceList`, and list pages such as `/webhooks` and `/api-keys`) use a shared state convention for the initial fetch:
+
+| State | Condition | UI |
+| ----- | --------- | -- |
+| **Loading** | `items === null` and fetch in flight | [`Spinner`](src/components/Spinner.tsx) (`role="status"` + `sr-only` label) next to visible “Loading…” copy; the outer polite region sets `aria-busy="true"` |
+| **Empty** | `items` is `[]` after a successful load | [`EmptyState`](src/components/EmptyState.tsx) with a short title and optional description |
+| **Populated** | `items.length > 0` | Table or list rows (create form stays above the list) |
+| **Error** | Load or mutation failure | `role="alert"` **outside** the polite list region |
+
+Do not add a second `aria-live` region for the same list — the spinner’s `role="status"` is the loading announcement, and the single polite region covers empty ↔ populated transitions.
+
 The events log also gives each row a `Copy JSON` button and an expand/collapse toggle. Large payloads start collapsed so verbose entries stay scannable, and the payload region is linked to the toggle with `aria-controls` and `aria-expanded` for assistive technology.
 
 ### Event Payload Safety

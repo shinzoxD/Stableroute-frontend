@@ -1,9 +1,8 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Badge } from '@/components/Badge';
 import { ConfirmDialog } from '@/components/ConfirmDialog';
-import { EmptyState } from '@/components/EmptyState';
 import { IconButton } from '@/components/IconButton';
 import { ResourceList } from '@/components/ResourceList';
 import { TextField } from '@/components/TextField';
@@ -57,7 +56,11 @@ export default function WebhooksClient() {
       );
       setTestResults((prev) => ({
         ...prev,
-        [hookId]: { testing: false, statusCode: result.statusCode, ok: result.ok },
+        [hookId]: {
+          testing: false,
+          statusCode: result.statusCode,
+          ok: result.ok,
+        },
       }));
     } catch {
       setTestResults((prev) => ({
@@ -67,22 +70,17 @@ export default function WebhooksClient() {
     }
   };
 
-  const isLoading = hooks.status === 'loading';
+  /**
+   * ResourceList state convention for the initial GET /api/v1/webhooks:
+   * - `items === null` and `loading`: Spinner (`role="status"`) + aria-busy.
+   * - `items` is `[]`: EmptyState title/description.
+   * - `items.length > 0`: registered-webhooks table.
+   * List-load errors stay outside the polite region with `role="alert"`.
+   */
+  const items = hooks.status === 'success' ? hooks.data : null;
+  const loading = hooks.status === 'idle' || hooks.status === 'loading';
   const isError = hooks.status === 'error';
-  const isEmpty = hooks.status === 'success' && hooks.data.length === 0;
-  const hasData = hooks.status === 'success' && hooks.data.length > 0;
   const displayError = localError;
-
-  // Memoize the loaded webhook items so unrelated state changes (typing in the
-  // URL field, toggling the confirm dialog, or localError updates) do not cause
-  // the ResourceList rows to re-render. `hooks.data` is stable-by-reference
-  // between refetches, so this memo only recomputes when the list actually
-  // changes.
-  const webhookData = hooks.status === 'success' ? hooks.data : null;
-  const webhookItems = useMemo(
-    () => webhookData ?? [],
-    [webhookData]
-  );
 
   const toggleEvent = (event: string) => {
     setSelectedEvents((current) =>
@@ -167,87 +165,59 @@ export default function WebhooksClient() {
           </p>
         )}
       </form>
-      {isLoading && (
-        <p className="text-sm text-neutral-600 dark:text-neutral-400">
-          Loading…
-        </p>
-      )}
       {isError && !localError && (
-        <p role="alert" className="text-sm text-rose-600">
-          {hooks.error}
-        </p>
+        <div
+          role="alert"
+          className="flex flex-wrap items-center gap-3 rounded-lg border border-rose-200 bg-rose-50 p-4 dark:border-rose-900 dark:bg-rose-950"
+        >
+          <p className="text-sm text-rose-600 dark:text-rose-400">
+            {hooks.error}
+          </p>
+          <button
+            type="button"
+            onClick={() => void hooks.refetch()}
+            className="rounded-full bg-rose-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-rose-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500"
+          >
+            Retry
+          </button>
+        </div>
       )}
-      {isEmpty && (
-        <EmptyState
-          title="No webhooks registered"
-          description="Register your first webhook endpoint using the form above."
-        />
-      )}
-      {hasData && (
-        <ResourceList
-          items={webhookItems}
-          loading={false}
-          emptyMessage="No webhooks registered."
-          getKey={(hook) => hook.id}
-          announcement={formStatus || undefined}
-          caption="Registered webhooks"
-          tableHeaders={['URL', 'Events', 'Registered', 'Actions']}
-          renderRow={(hook, { requestRemove }) => (
-            <>
-              <div>
-                <p className="break-all text-sm font-medium">{hook.url}</p>
-                <p className="text-xs text-neutral-500">
-                  Registered <TimeAgo ts={hook.createdAt} />
-                </p>
-                <div className="mt-1 flex flex-wrap gap-1">
-                  {hook.events.map((event) => (
-                    <Badge key={event}>{event}</Badge>
-                  ))}
-                </div>
-                {testResults[hook.id]?.statusCode !== undefined && (
-                  <p
-                    className={`mt-1 text-xs ${
-                      testResults[hook.id]?.ok
-                        ? 'text-green-600'
-                        : 'text-rose-600'
-                    }`}
-                  >
-                    Test delivery:{' '}
-                    {testResults[hook.id]?.ok ? 'OK' : 'Failed'} (
-                    {testResults[hook.id]?.statusCode})
-                  </p>
-                )}
+      <ResourceList
+        items={items}
+        loading={loading}
+        loadingLabel="Loading webhooks"
+        emptyMessage="No webhooks registered"
+        emptyDescription="Register your first webhook endpoint using the form above."
+        getKey={(hook) => hook.id}
+        announcement={formStatus || undefined}
+        caption="Registered webhooks"
+        tableHeaders={['URL', 'Events', 'Registered', 'Actions']}
+        renderRow={(hook, { requestRemove }) => (
+          <>
+            <div>
+              <p className="break-all text-sm font-medium">{hook.url}</p>
+              <p className="text-xs text-neutral-500">
+                Registered <TimeAgo ts={hook.createdAt} />
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {hook.events.map((event) => (
+                  <Badge key={event}>{event}</Badge>
+                ))}
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={testResults[hook.id]?.testing}
-                  aria-busy={testResults[hook.id]?.testing}
-                  aria-label={`Test delivery for ${hook.url}`}
-                  onClick={() => void sendTestDelivery(hook.id)}
-                  className="rounded-full border border-neutral-300 px-3 py-1 text-xs hover:border-neutral-500 disabled:opacity-50 dark:border-neutral-700"
+              {testResults[hook.id]?.statusCode !== undefined && (
+                <p
+                  className={`mt-1 text-xs ${
+                    testResults[hook.id]?.ok
+                      ? 'text-green-600'
+                      : 'text-rose-600'
+                  }`}
                 >
-                  {testResults[hook.id]?.testing ? 'Testing…' : 'Test'}
-                </button>
-                <IconButton label="Remove webhook" onClick={requestRemove}>
-                  ×
-                </IconButton>
-              </div>
-            </>
-          )}
-          renderCells={(hook, { requestRemove }) => [
-            <span key="url" className="break-all text-sm font-medium">
-              {hook.url}
-            </span>,
-            <div key="events" className="flex flex-wrap gap-1">
-              {hook.events.map((event) => (
-                <Badge key={event}>{event}</Badge>
-              ))}
-            </div>,
-            <span key="registered" className="text-xs text-neutral-500">
-              <TimeAgo ts={hook.createdAt} />
-            </span>,
-            <div key="actions" className="flex items-center gap-2">
+                  Test delivery: {testResults[hook.id]?.ok ? 'OK' : 'Failed'} (
+                  {testResults[hook.id]?.statusCode})
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 disabled={testResults[hook.id]?.testing}
@@ -258,32 +228,58 @@ export default function WebhooksClient() {
               >
                 {testResults[hook.id]?.testing ? 'Testing…' : 'Test'}
               </button>
-              {testResults[hook.id]?.statusCode !== undefined && (
-                <span
-                  className={`text-xs ${
-                    testResults[hook.id]?.ok
-                      ? 'text-green-600'
-                      : 'text-rose-600'
-                  }`}
-                >
-                  {testResults[hook.id]?.ok ? 'OK' : 'Failed'} (
-                  {testResults[hook.id]?.statusCode})
-                </span>
-              )}
               <IconButton label="Remove webhook" onClick={requestRemove}>
                 ×
               </IconButton>
-            </div>,
-          ]}
-          removeDialogTitle="Remove webhook?"
-          removeDialogConfirmLabel="Remove"
-          onRemove={(hook) =>
-            void apiDelete(`/api/v1/webhooks/${hook.id}`).then(() =>
-              hooks.refetch()
-            )
-          }
-        />
-      )}
+            </div>
+          </>
+        )}
+        renderCells={(hook, { requestRemove }) => [
+          <span key="url" className="break-all text-sm font-medium">
+            {hook.url}
+          </span>,
+          <div key="events" className="flex flex-wrap gap-1">
+            {hook.events.map((event) => (
+              <Badge key={event}>{event}</Badge>
+            ))}
+          </div>,
+          <span key="registered" className="text-xs text-neutral-500">
+            <TimeAgo ts={hook.createdAt} />
+          </span>,
+          <div key="actions" className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={testResults[hook.id]?.testing}
+              aria-busy={testResults[hook.id]?.testing}
+              aria-label={`Test delivery for ${hook.url}`}
+              onClick={() => void sendTestDelivery(hook.id)}
+              className="rounded-full border border-neutral-300 px-3 py-1 text-xs hover:border-neutral-500 disabled:opacity-50 dark:border-neutral-700"
+            >
+              {testResults[hook.id]?.testing ? 'Testing…' : 'Test'}
+            </button>
+            {testResults[hook.id]?.statusCode !== undefined && (
+              <span
+                className={`text-xs ${
+                  testResults[hook.id]?.ok ? 'text-green-600' : 'text-rose-600'
+                }`}
+              >
+                {testResults[hook.id]?.ok ? 'OK' : 'Failed'} (
+                {testResults[hook.id]?.statusCode})
+              </span>
+            )}
+            <IconButton label="Remove webhook" onClick={requestRemove}>
+              ×
+            </IconButton>
+          </div>,
+        ]}
+        removeDialogTitle="Remove webhook?"
+        removeDialogConfirmLabel="Remove"
+        onRemove={(hook) =>
+          void apiDelete(`/api/v1/webhooks/${hook.id}`).then(() =>
+            hooks.refetch()
+          )
+        }
+      />
       <ConfirmDialog
         open={confirmRegister}
         tone="default"
